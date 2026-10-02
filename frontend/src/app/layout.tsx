@@ -22,6 +22,9 @@ export const metadata: Metadata = {
   title: "Talentum — AI-Powered Talent Intelligence",
   description:
     "Hire smarter with AI-powered resume analysis, semantic candidate matching, and explainable ranking.",
+  verification: {
+    google: "HZMf_C2Q6vsU0TMCjShaNZK9uTozRdrIwX5GQvPWdi4",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
