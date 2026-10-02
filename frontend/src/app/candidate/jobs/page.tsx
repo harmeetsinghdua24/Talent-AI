@@ -51,7 +51,6 @@ export default function CandidateJobsPage() {
   const [applying, setApplying] = useState<number | null>(null);
   const [applied, setApplied] = useState<Set<number>>(new Set());
 
-  // Job Activity filter
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
 
   useEffect(() => {
@@ -82,14 +81,17 @@ export default function CandidateJobsPage() {
     try {
       await api.applyToJob(jobId, resumeId);
 
-      setApplied((prev) => new Set(prev).add(jobId));
+      setApplied((prev) => {
+        const next = new Set(prev);
+        next.add(jobId);
+        return next;
+      });
 
-      // Refresh activity after successful application
       try {
         const updatedActivity = await api.candidateJobActivity();
         setActivity(updatedActivity);
       } catch {
-        // Application itself succeeded, so activity refresh failure is ignored.
+        // Application itself succeeded.
       }
 
       show(
@@ -191,7 +193,9 @@ export default function CandidateJobsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-ink-muted">Applied</p>
+                        <p className="text-xs text-ink-muted">
+                          Applied
+                        </p>
 
                         <p className="mt-1 text-2xl font-display font-bold text-ink">
                           {activity.applied_jobs}
@@ -288,6 +292,7 @@ export default function CandidateJobsPage() {
                   {jobs.map((job) => (
                     <AnimatedItem key={job.id}>
                       <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
+                        {/* Company + Job */}
                         <div className="flex items-start gap-3 mb-3">
                           <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
                             {(job.company_name || job.title)
@@ -308,6 +313,7 @@ export default function CandidateJobsPage() {
                           </div>
                         </div>
 
+                        {/* Location */}
                         <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
                           {job.location && (
                             <span className="flex items-center gap-1">
@@ -321,6 +327,7 @@ export default function CandidateJobsPage() {
                           )}
                         </div>
 
+                        {/* Skills */}
                         {job.ai_extracted && (
                           <div className="flex flex-wrap gap-1.5 mb-5">
                             {job.ai_extracted.must_have_skills
@@ -336,6 +343,7 @@ export default function CandidateJobsPage() {
                           </div>
                         )}
 
+                        {/* Apply */}
                         <div className="mt-auto pt-4 border-t border-border">
                           <Button
                             size="sm"
@@ -417,39 +425,70 @@ export default function CandidateJobsPage() {
                 return (
                   <AnimatedSection className="grid md:grid-cols-2 gap-5">
                     {filteredActivityJobs.map((activityJob) => {
+                      /*
+                       * IMPORTANT:
+                       * Do NOT return null if the job is missing from
+                       * api.listJobs().
+                       *
+                       * candidateJobActivity() already contains the
+                       * information required to show the job, including
+                       * closed jobs.
+                       */
                       const job = jobs.find(
                         (item) => item.id === activityJob.job_id
                       );
 
-                      if (!job) {
-                        return null;
-                      }
+                      const jobId = activityJob.job_id;
+
+                      const title =
+                        activityJob.job_title ||
+                        job?.title ||
+                        "Untitled Job";
+
+                      const companyName =
+                        activityJob.company_name ||
+                        job?.company_name ||
+                        null;
+
+                      const location =
+                        activityJob.location ||
+                        job?.location ||
+                        null;
+
+                      const employmentType =
+                        activityJob.employment_type ||
+                        job?.employment_type ||
+                        null;
 
                       const isApplied =
-                        applied.has(job.id) || activityJob.applied === true;
+                        applied.has(jobId) || activityJob.applied === true;
+
+                      const status =
+                        activityJob.status?.toLowerCase() || "";
 
                       const isClosed =
-                        activityJob.status?.toLowerCase() === "closed";
+                        status === "closed" ||
+                        status.includes("closed");
 
                       return (
-                        <AnimatedItem key={job.id}>
+                        <AnimatedItem key={jobId}>
                           <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
                             {/* Company + Job */}
                             <div className="flex items-start gap-3 mb-3">
                               <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
-                                {(job.company_name || job.title)
+                                {(companyName || title)
                                   .charAt(0)
                                   .toUpperCase()}
                               </div>
 
                               <div className="min-w-0">
                                 <h3 className="font-display font-semibold text-ink leading-snug">
-                                  {job.title}
+                                  {title}
                                 </h3>
 
-                                {job.company_name && (
+                                {companyName && (
                                   <p className="text-sm text-ink-muted">
-                                    {job.company_name}
+                                    {companyName}
                                   </p>
                                 )}
                               </div>
@@ -457,20 +496,20 @@ export default function CandidateJobsPage() {
 
                             {/* Location + Employment */}
                             <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
-                              {job.location && (
+                              {location && (
                                 <span className="flex items-center gap-1">
                                   <MapPin size={12} />
-                                  {job.location}
+                                  {location}
                                 </span>
                               )}
 
-                              {job.employment_type && (
-                                <span>{job.employment_type}</span>
+                              {employmentType && (
+                                <span>{employmentType}</span>
                               )}
                             </div>
 
-                            {/* Skills */}
-                            {job.ai_extracted && (
+                            {/* Skills - use JobOut data if available */}
+                            {job?.ai_extracted && (
                               <div className="flex flex-wrap gap-1.5 mb-5">
                                 {job.ai_extracted.must_have_skills
                                   .slice(0, 5)
@@ -536,8 +575,7 @@ export default function CandidateJobsPage() {
                                   {isApplied &&
                                     activityJob.application_status && (
                                       <span className="text-xs text-ink-muted">
-                                        •{" "}
-                                        {activityJob.application_status}
+                                        • {activityJob.application_status}
                                       </span>
                                     )}
                                 </div>
@@ -559,15 +597,15 @@ export default function CandidateJobsPage() {
                                   size="sm"
                                   className="w-full"
                                   disabled={
-                                    applying === job.id ||
+                                    applying === jobId ||
                                     isApplied ||
                                     !resumeId
                                   }
-                                  onClick={() => handleApply(job.id)}
+                                  onClick={() => handleApply(jobId)}
                                 >
                                   {isApplied
                                     ? "Applied"
-                                    : applying === job.id
+                                    : applying === jobId
                                     ? "Applying…"
                                     : "Apply now"}
                                 </Button>
