@@ -9,7 +9,18 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.database import Base, engine
-from app.api.routers import auth, jobs, resumes, ranking, analytics, recommendations, screening, interviews, notifications, offers
+from app.api.routers import (
+    auth,
+    jobs,
+    resumes,
+    ranking,
+    analytics,
+    recommendations,
+    screening,
+    interviews,
+    notifications,
+    offers,
+)
 from app.models import models  # noqa: F401 - ensures models are registered on Base
 
 settings = get_settings()
@@ -25,15 +36,34 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# --- CORS ---
+# Keep origins from environment/settings and explicitly allow
+# the local Next.js frontend during development.
+configured_origins = settings.CORS_ORIGINS or []
+
+allowed_origins = list(configured_origins)
+
+for origin in [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]:
+    if origin not in allowed_origins:
+        allowed_origins.append(origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # --- Minimal in-memory rate limiting (per-process; use Redis in production) ---
 _request_log: dict[str, list[float]] = defaultdict(list)
@@ -44,16 +74,29 @@ async def rate_limit_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
     window = 60
-    _request_log[client_ip] = [t for t in _request_log[client_ip] if now - t < window]
+
+    _request_log[client_ip] = [
+        t for t in _request_log[client_ip]
+        if now - t < window
+    ]
+
     if len(_request_log[client_ip]) >= settings.RATE_LIMIT_PER_MINUTE:
-        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded"},
+        )
+
     _request_log[client_ip].append(now)
+
     return await call_next(request)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "project": settings.PROJECT_NAME}
+    return {
+        "status": "ok",
+        "project": settings.PROJECT_NAME,
+    }
 
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)

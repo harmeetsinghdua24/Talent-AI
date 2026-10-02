@@ -57,7 +57,10 @@ class Settings:
     WEIGHT_CERTIFICATIONS: float = float(os.getenv("WEIGHT_CERTIFICATIONS", "0.05"))
 
     # CORS
-    CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    CORS_ORIGINS: list = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,https://talent-ai-eight.vercel.app"
+).split(",")
 
     # Rate limiting (requests per minute per IP) - enforced in middleware
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
