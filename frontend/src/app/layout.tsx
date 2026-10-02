@@ -19,11 +19,59 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Talentum — AI-Powered Talent Intelligence",
+  metadataBase: new URL("https://talent-ai-eight.vercel.app"),
+
+  title: {
+    default: "Talent-AI | AI-Powered Recruitment & Talent Intelligence",
+    template: "%s | Talent-AI",
+  },
+
   description:
-    "Hire smarter with AI-powered resume analysis, semantic candidate matching, and explainable ranking.",
+    "Talent-AI is an AI-powered recruitment and talent intelligence platform for smarter hiring, resume analysis, candidate matching, screening, and recruitment analytics.",
+
+  keywords: [
+    "Talent-AI",
+    "AI recruitment platform",
+    "AI-powered recruitment",
+    "talent intelligence",
+    "resume screening",
+    "candidate matching",
+    "AI hiring",
+    "recruitment platform",
+    "automated resume analysis",
+  ],
+
+  authors: [{ name: "Talent-AI" }],
+  creator: "Talent-AI",
+  applicationName: "Talent-AI",
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
+
   verification: {
     google: "HZMf_C2Q6vsU0TMCjShaNZK9uTozRdrIwX5GQvPWdi4",
+  },
+
+  openGraph: {
+    type: "website",
+    url: "https://talent-ai-eight.vercel.app",
+    title: "Talent-AI | AI-Powered Recruitment & Talent Intelligence",
+    description:
+      "AI-powered resume analysis, candidate matching, screening, and recruitment intelligence.",
+    siteName: "Talent-AI",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Talent-AI | AI-Powered Recruitment & Talent Intelligence",
+    description:
+      "AI-powered recruitment, resume screening, candidate matching, and talent intelligence.",
   },
 };
 
