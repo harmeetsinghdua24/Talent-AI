@@ -83,14 +83,33 @@ def get_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(get
 
 
 @router.patch("/{job_id}", response_model=JobOut)
-def update_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db), user: User = Depends(require_recruiter)):
+def update_job(
+    job_id: int,
+    payload: JobUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_recruiter),
+):
     job = db.query(Job).filter(Job.id == job_id).first()
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    recruiter = db.query(Recruiter).filter(
+        Recruiter.user_id == user.id
+    ).first()
+
+    if not recruiter or job.recruiter_id != recruiter.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only update your own jobs"
+        )
+
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(job, field, value)
+
     db.commit()
     db.refresh(job)
+
     return job
 
 
