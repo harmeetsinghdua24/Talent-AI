@@ -1,0 +1,53 @@
+{
+  "results_by_model": {
+    "logistic_regression": {
+      "precision": 0.9101,
+      "recall": 0.9033,
+      "f1": 0.9067,
+      "roc_auc": 0.9886,
+      "confusion_matrix": [
+        [
+          507,
+          24
+        ],
+        [
+          26,
+          243
+        ]
+      ]
+    },
+    "random_forest": {
+      "precision": 0.9015,
+      "recall": 0.9182,
+      "f1": 0.9098,
+      "roc_auc": 0.987,
+      "confusion_matrix": [
+        [
+          504,
+          27
+        ],
+        [
+          22,
+          247
+        ]
+      ]
+    },
+    "xgboost": {
+      "precision": 0.8993,
+      "recall": 0.8959,
+      "f1": 0.8976,
+      "roc_auc": 0.984,
+      "confusion_matrix": [
+        [
+          504,
+          27
+        ],
+        [
+          28,
+          241
+        ]
+      ]
+    }
+  },
+  "selected_model": "random_forest"
+}

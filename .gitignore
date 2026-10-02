@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+backend/talent_ai.db
+backend/uploads/
+backend/.env
+
+# ML artifacts (keep the trained model checked in; ignore large scratch runs)
+ml/data/*.csv
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+.env
+**/.env
+*.env
+
+venv/
+**/venv/
+
+__pycache__/
+**/__pycache__/
+*.pyc
+
+node_modules/
+**/node_modules/
+
+.next/
+**/.next/
+
+*.db

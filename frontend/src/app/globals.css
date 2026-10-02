@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+/*
+  DESIGN TOKENS — Talentum
+  A premium, light-only recruitment-intelligence product.
+  Palette: cool neutrals (canvas/surface/ink) + a single "signal indigo"
+  brand accent, distinct from the generic SaaS blue/violet defaults.
+  Semantic colors are reserved strictly for status meaning.
+*/
+:root {
+  /* Neutrals */
+  --canvas: #F7F8FA;       /* page background */
+  --surface: #FFFFFF;      /* card background */
+  --surface-raised: #FFFFFF;
+  --border: #E4E7EC;
+  --border-strong: #D0D5DD;
+  --ink: #12141C;          /* primary text */
+  --ink-muted: #5B6273;    /* secondary text */
+  --ink-faint: #8A90A0;    /* tertiary text */
+
+  /* Brand — Signal Indigo */
+  --brand: #4338CA;
+  --brand-hover: #3730A3;
+  --brand-tint: #EEF0FD;
+  --brand-tint-strong: #E0E4FB;
+
+  /* Semantic */
+  --success: #15803D;
+  --success-tint: #EAF6EE;
+  --danger: #B91C1C;
+  --danger-tint: #FCEBEB;
+  --warning: #B45309;
+  --warning-tint: #FDF3E7;
+  --info: #2563EB;
+  --info-tint: #EAF1FE;
+}
+
+/* Force light theme regardless of OS preference — this product has no dark mode. */
+:root, html.light {
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-tint-strong: var(--brand-tint-strong);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Visible keyboard focus everywhere, per accessibility requirement */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background: var(--brand-tint-strong);
+  color: var(--brand-hover);
+}
+
+/* Layered, soft shadows - more natural than a single hard drop shadow */
+.shadow-card {
+  box-shadow: 0 1px 2px rgba(18, 20, 28, 0.04), 0 1px 3px rgba(18, 20, 28, 0.03);
+}
+.shadow-card-hover {
+  box-shadow: 0 4px 6px -1px rgba(18, 20, 28, 0.06), 0 2px 4px -2px rgba(18, 20, 28, 0.04);
+}
+.shadow-float {
+  box-shadow: 0 10px 20px -5px rgba(18, 20, 28, 0.08), 0 4px 8px -4px rgba(18, 20, 28, 0.04);
+}
+
+/* Subtle brand-tinted surface used for hero/stat areas */
+.surface-accent {
+  background: linear-gradient(180deg, var(--brand-tint) 0%, var(--surface) 100%);
+}
+
+/* Native cursor hidden only while the JS-driven custom cursor is mounted
+   (landing page, fine-pointer devices, motion not reduced) — see
+   CustomCursor.tsx. Interactive elements keep their own cursor affordance
+   removed too, since the custom ring already communicates hover state. */
+body.custom-cursor-active,
+body.custom-cursor-active a,
+body.custom-cursor-active button {
+  cursor: none;
+}
