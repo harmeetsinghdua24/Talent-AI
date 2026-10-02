@@ -195,6 +195,26 @@ export const api = {
 
   // ---- Jobs ----
   listJobs: () => request<JobOut[]>("/jobs"),
+  candidateJobActivity: () =>
+  request<{
+    total_jobs: number;
+    applied_jobs: number;
+    not_applied_jobs: number;
+    open_jobs: number;
+    closed_jobs: number;
+    jobs: {
+      job_id: number;
+      job_title: string;
+      company_name?: string | null;
+      status: string;
+      applied: boolean;
+      application_status?: string | null;
+      applied_at?: string | null;
+      created_at?: string | null;
+      location?: string | null;
+      employment_type?: string | null;
+    }[];
+  }>("/jobs/candidate/activity"),
   getJob: (id: number) => request<JobOut>(`/jobs/${id}`),
   createJob: (payload: {
     title: string;
