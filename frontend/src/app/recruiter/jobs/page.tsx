@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, MapPin, Briefcase, Users } from "lucide-react";
+import { ArrowUpRight, MapPin, Briefcase, Users, XCircle } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,36 @@ import { api, JobOut } from "@/lib/api";
 
 export default function JobsListPage() {
   const [jobs, setJobs] = useState<JobOut[] | null>(null);
+  const [closingJobId, setClosingJobId] = useState<number | null>(null);
+
+const handleCloseJob = async (jobId: number) => {
+  const confirmed = window.confirm(
+    "Are you sure you want to close this job? Candidates will no longer be able to apply."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setClosingJobId(jobId);
+
+    const updatedJob = await api.updateJob(jobId, {
+      status: "closed",
+    });
+
+    setJobs((currentJobs) =>
+      currentJobs
+        ? currentJobs.map((job) =>
+            job.id === jobId ? updatedJob : job
+          )
+        : currentJobs
+    );
+  } catch (error) {
+    console.error(error);
+    window.alert("Could not close the job. Please try again.");
+  } finally {
+    setClosingJobId(null);
+  }
+};
 
   useEffect(() => {
     api.listJobs().then(setJobs);
@@ -78,13 +108,25 @@ export default function JobsListPage() {
                     </div>
                   )}
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-border">
-                    <Link
-                      href={`/recruiter/jobs/${job.id}/candidates`}
-                      className="text-sm font-medium text-brand hover:text-brand-hover flex items-center gap-1"
-                    >
-                      <Users size={14} /> View candidates
-                    </Link>
-                  </div>
+  <Link
+    href={`/recruiter/jobs/${job.id}/candidates`}
+    className="text-sm font-medium text-brand hover:text-brand-hover flex items-center gap-1"
+  >
+    <Users size={14} /> View candidates
+  </Link>
+
+  {job.status === "open" && (
+    <button
+      type="button"
+      onClick={() => handleCloseJob(job.id)}
+      disabled={closingJobId === job.id}
+      className="text-sm font-medium text-red-600 hover:text-red-700 flex items-center gap-1 disabled:opacity-50"
+    >
+      <XCircle size={14} />
+      {closingJobId === job.id ? "Closing..." : "Close Job"}
+    </button>
+  )}
+</div>
                 </Card>
                 </AnimatedItem>
               ))}
