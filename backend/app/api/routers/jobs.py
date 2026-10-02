@@ -2,7 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.models import Job, Recruiter, User, JobSkill, Skill, SkillPriority
+from app.models.models import (
+    Job,
+    Recruiter,
+    User,
+    JobSkill,
+    Skill,
+    SkillPriority,
+    Candidate,
+    Application,
+)
 from app.schemas.job import JobCreate, JobUpdate, JobOut
 from app.api.deps import get_current_user, require_recruiter
 from app.services.jd_intelligence import analyze_job_description
@@ -72,7 +81,92 @@ def list_jobs(db: Session = Depends(get_db), user: User = Depends(get_current_us
     else:
         query = query.filter(Job.status == "open")
     return query.order_by(Job.created_at.desc()).all()
+@router.get("/candidate/activity")
+def candidate_job_activity(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role.value != "candidate":
+        raise HTTPException(
+            status_code=403,
+            detail="Only candidates can access job activity",
+        )
 
+    candidate = (
+        db.query(Candidate)
+        .filter(Candidate.user_id == user.id)
+        .first()
+    )
+
+    if not candidate:
+        return {
+            "total_jobs": 0,
+            "applied_jobs": 0,
+            "not_applied_jobs": 0,
+            "open_jobs": 0,
+            "closed_jobs": 0,
+            "jobs": [],
+        }
+
+    jobs = (
+        db.query(Job)
+        .order_by(Job.created_at.desc())
+        .all()
+    )
+
+    applications = (
+        db.query(Application)
+        .filter(Application.candidate_id == candidate.id)
+        .all()
+    )
+
+    application_by_job = {
+        application.job_id: application
+        for application in applications
+    }
+
+    result = []
+
+    for job in jobs:
+        application = application_by_job.get(job.id)
+
+        result.append({
+            "job_id": job.id,
+            "job_title": job.title,
+            "company_name": (
+    job.recruiter.user.company_name
+    if job.recruiter and job.recruiter.user
+    else None
+),
+            "status": job.status,
+            "applied": application is not None,
+            "application_status": (
+                application.status.value
+                if application
+                else None
+            ),
+            "applied_at": (
+                application.applied_at.isoformat()
+                if application
+                else None
+            ),
+            "created_at": (
+                job.created_at.isoformat()
+                if job.created_at
+                else None
+            ),
+            "location": job.location,
+            "employment_type": job.employment_type,
+        })
+
+    return {
+        "total_jobs": len(jobs),
+        "applied_jobs": sum(1 for job in result if job["applied"]),
+        "not_applied_jobs": sum(1 for job in result if not job["applied"]),
+        "open_jobs": sum(1 for job in result if job["status"] == "open"),
+        "closed_jobs": sum(1 for job in result if job["status"] == "closed"),
+        "jobs": result,
+    }
 
 @router.get("/{job_id}", response_model=JobOut)
 def get_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
