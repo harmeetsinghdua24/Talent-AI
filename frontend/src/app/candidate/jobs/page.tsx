@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   MapPin,
@@ -22,8 +22,8 @@ type JobActivity = {
   job_id: number;
   job_title: string;
   company_name?: string | null;
-  status: string;
-  applied: boolean | string;
+  status?: string | null;
+  applied?: boolean | string | number | null;
   application_status?: string | null;
   applied_at?: string | null;
   created_at?: string | null;
@@ -49,38 +49,139 @@ export default function CandidateJobsPage() {
   const [activity, setActivity] = useState<ActivityData | null>(null);
   const [resumeId, setResumeId] = useState<number | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
+
+  // Local applied state.
+  // This makes the UI update immediately after Apply.
   const [applied, setApplied] = useState<Set<number>>(new Set());
 
-  // Job Activity filter
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
 
+  /*
+   * Load jobs + resume + candidate activity
+   */
   useEffect(() => {
-    api.listJobs().then(setJobs);
+    let mounted = true;
 
-    api.myResumes().then((resumes) => {
-      if (resumes.length > 0) {
-        setResumeId(resumes[0].resume_id);
+    async function loadData() {
+      try {
+        const [jobsData, resumes, activityData] = await Promise.all([
+          api.listJobs(),
+          api.myResumes(),
+          api.candidateJobActivity(),
+        ]);
+
+        if (!mounted) return;
+
+        setJobs(jobsData);
+
+        if (resumes.length > 0) {
+          setResumeId(resumes[0].resume_id);
+        }
+
+        setActivity(activityData);
+
+        /*
+         * Initialize local applied set from backend activity.
+         */
+        const appliedIds = new Set<number>();
+
+        for (const job of activityData.jobs || []) {
+          if (isJobApplied(job)) {
+            appliedIds.add(job.job_id);
+          }
+        }
+
+        setApplied(appliedIds);
+      } catch {
+        /*
+         * If activity fails, still try to load the normal jobs list.
+         */
+        try {
+          const jobsData = await api.listJobs();
+
+          if (!mounted) return;
+
+          setJobs(jobsData);
+        } catch {
+          // Ignore. Existing page behavior handles empty/loading state.
+        }
       }
-    });
+    }
 
-    api
-      .candidateJobActivity()
-      .then(setActivity)
-      .catch(() => {
-        // Activity is optional; don't block the Jobs page if it fails.
-      });
+    loadData();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  /**
-   * Normalize applied value because backend may return
-   * either boolean true/false or string "true"/"false".
+  /*
+   * Backend may return:
+   * true / false
+   * "true" / "false"
+   * 1 / 0
+   * "1" / "0"
+   * yes / no
    */
   function isJobApplied(job: JobActivity) {
-    return (
-      job.applied === true ||
-      String(job.applied).toLowerCase() === "true"
-    );
+    const value = job.applied;
+
+    if (value === true || value === 1) {
+      return true;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+
+      return (
+        normalized === "true" ||
+        normalized === "1" ||
+        normalized === "yes" ||
+        normalized === "applied"
+      );
+    }
+
+    return false;
   }
+
+  /*
+   * A job is considered applied if either:
+   * 1. backend says applied
+   * 2. user just applied during this session
+   */
+  function isCurrentlyApplied(job: JobActivity) {
+    return applied.has(job.job_id) || isJobApplied(job);
+  }
+
+  /*
+   * Filter activity jobs.
+   *
+   * IMPORTANT:
+   * We use candidateJobActivity() as the source of truth here.
+   * This is important because a CLOSED job may not exist in listJobs(),
+   * but it can still exist in candidate activity.
+   */
+  const filteredActivityJobs = useMemo(() => {
+    if (!activity?.jobs) {
+      return [];
+    }
+
+    const activityJobs = activity.jobs;
+
+    if (jobFilter === "notApplied") {
+      return activityJobs.filter(
+        (job) => !isCurrentlyApplied(job)
+      );
+    }
+
+    if (jobFilter === "applied") {
+      return activityJobs.filter(
+        (job) => isCurrentlyApplied(job)
+      );
+    }
+
+    return activityJobs;
+  }, [activity, jobFilter, applied]);
 
   async function handleApply(jobId: number) {
     if (!resumeId) {
@@ -93,18 +194,40 @@ export default function CandidateJobsPage() {
     try {
       await api.applyToJob(jobId, resumeId);
 
+      /*
+       * Immediately mark as applied locally.
+       */
       setApplied((prev) => {
         const next = new Set(prev);
         next.add(jobId);
         return next;
       });
 
-      // Refresh activity after successful application
+      /*
+       * Refresh activity from backend.
+       */
       try {
-        const updatedActivity = await api.candidateJobActivity();
+        const updatedActivity =
+          await api.candidateJobActivity();
+
         setActivity(updatedActivity);
+
+        /*
+         * Rebuild applied IDs from fresh backend response.
+         */
+        const backendAppliedIds = new Set<number>();
+
+        for (const job of updatedActivity.jobs || []) {
+          if (isJobApplied(job)) {
+            backendAppliedIds.add(job.job_id);
+          }
+        }
+
+        setApplied(backendAppliedIds);
       } catch {
-        // Application itself succeeded, so activity refresh failure is ignored.
+        /*
+         * Application succeeded even if activity refresh fails.
+         */
       }
 
       show(
@@ -121,6 +244,61 @@ export default function CandidateJobsPage() {
     }
   }
 
+  /*
+   * Convert activity job into display information.
+   *
+   * We first use listJobs() data when available.
+   * If the job is closed and missing from listJobs(),
+   * activity data is used instead.
+   */
+  function getJobDisplayData(activityJob: JobActivity) {
+    const job = jobs?.find(
+      (item) => item.id === activityJob.job_id
+    );
+
+    return {
+      job,
+      jobId: activityJob.job_id,
+
+      jobTitle:
+        job?.title ||
+        activityJob.job_title ||
+        "Untitled Job",
+
+      companyName:
+        job?.company_name ||
+        activityJob.company_name ||
+        "",
+
+      location:
+        job?.location ||
+        activityJob.location ||
+        "",
+
+      employmentType:
+        job?.employment_type ||
+        activityJob.employment_type ||
+        "",
+    };
+  }
+
+  /*
+   * Determine whether job is closed.
+   */
+  function isJobClosed(activityJob: JobActivity) {
+    const status = String(
+      activityJob.status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      status === "closed" ||
+      status === "inactive" ||
+      status === "expired"
+    );
+  }
+
   return (
     <RequireRole role="candidate">
       <AppShell>
@@ -130,24 +308,29 @@ export default function CandidateJobsPage() {
         />
 
         <div className="px-6 sm:px-8 pb-10">
+
           {/* Resume Warning */}
-          {!resumeId && jobs !== null && jobs.length > 0 && (
-            <div className="mb-6 flex items-center justify-between rounded-xl border border-warning/20 bg-warning-tint px-5 py-3.5">
-              <div className="flex items-center gap-2 text-sm text-warning">
-                <FileText size={15} />
-                Upload a resume to apply to jobs and get a match score.
+          {!resumeId &&
+            jobs !== null &&
+            jobs.length > 0 && (
+              <div className="mb-6 flex items-center justify-between rounded-xl border border-warning/20 bg-warning-tint px-5 py-3.5">
+                <div className="flex items-center gap-2 text-sm text-warning">
+                  <FileText size={15} />
+                  Upload a resume to apply to jobs and get a match score.
+                </div>
+
+                <Link
+                  href="/candidate/resume"
+                  className="text-sm font-medium text-warning underline"
+                >
+                  Upload now
+                </Link>
               </div>
+            )}
 
-              <Link
-                href="/candidate/resume"
-                className="text-sm font-medium text-warning underline"
-              >
-                Upload now
-              </Link>
-            </div>
-          )}
-
-          {/* Job Activity */}
+          {/* =========================
+              JOB ACTIVITY
+          ========================== */}
           {activity && (
             <div className="mb-8">
               <div className="mb-4">
@@ -161,7 +344,8 @@ export default function CandidateJobsPage() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Total Jobs */}
+
+                {/* TOTAL JOBS */}
                 <Card
                   className={`p-5 transition-all ${
                     jobFilter === "all"
@@ -193,7 +377,7 @@ export default function CandidateJobsPage() {
                   </button>
                 </Card>
 
-                {/* Applied */}
+                {/* APPLIED */}
                 <Card
                   className={`p-5 transition-all ${
                     jobFilter === "applied"
@@ -225,9 +409,9 @@ export default function CandidateJobsPage() {
                   </button>
                 </Card>
 
-                {/* Not Applied */}
+                {/* NOT APPLIED */}
                 <Card
-                  className={`p-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-card-hover ${
+                  className={`p-5 transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-card-hover ${
                     jobFilter === "notApplied"
                       ? "border-warning ring-1 ring-warning/20"
                       : ""
@@ -257,7 +441,7 @@ export default function CandidateJobsPage() {
                   </button>
                 </Card>
 
-                {/* Open Jobs */}
+                {/* OPEN JOBS */}
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -280,12 +464,18 @@ export default function CandidateJobsPage() {
             </div>
           )}
 
-          {/* Jobs */}
+          {/* =========================
+              LOADING
+          ========================== */}
           {jobs === null ? (
             <p className="text-sm text-ink-muted">
               Loading jobs…
             </p>
           ) : activity === null ? (
+
+            /* =========================
+               ACTIVITY API NOT AVAILABLE
+            ========================== */
             jobs.length === 0 ? (
               <EmptyState
                 title="No open jobs right now"
@@ -307,6 +497,7 @@ export default function CandidateJobsPage() {
                   {jobs.map((job) => (
                     <AnimatedItem key={job.id}>
                       <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
+
                         <div className="flex items-start gap-3 mb-3">
                           <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
                             {(job.company_name || job.title)
@@ -336,7 +527,9 @@ export default function CandidateJobsPage() {
                           )}
 
                           {job.employment_type && (
-                            <span>{job.employment_type}</span>
+                            <span>
+                              {job.employment_type}
+                            </span>
                           )}
                         </div>
 
@@ -360,7 +553,9 @@ export default function CandidateJobsPage() {
                             size="sm"
                             className="w-full"
                             disabled={!resumeId}
-                            onClick={() => handleApply(job.id)}
+                            onClick={() =>
+                              handleApply(job.id)
+                            }
                           >
                             Apply now
                           </Button>
@@ -371,9 +566,13 @@ export default function CandidateJobsPage() {
                 </AnimatedSection>
               </>
             )
+
           ) : (
+
+            /* =========================
+               ACTIVITY VIEW
+            ========================== */
             <>
-              {/* Filter Heading */}
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="font-display text-lg font-semibold text-ink">
@@ -404,246 +603,208 @@ export default function CandidateJobsPage() {
                 )}
               </div>
 
-              {(() => {
-                /*
-                 * IMPORTANT:
-                 * Backend can return applied as:
-                 *   true / false
-                 * OR
-                 *   "true" / "false"
-                 *
-                 * So we normalize it through isJobApplied().
-                 */
-                const filteredActivityJobs =
-                  jobFilter === "notApplied"
-                    ? activity.jobs.filter(
-                        (job) => !isJobApplied(job)
-                      )
-                    : jobFilter === "applied"
-                    ? activity.jobs.filter(
-                        (job) => isJobApplied(job)
-                      )
-                    : activity.jobs;
+              {/* =========================
+                  EMPTY FILTER STATE
+              ========================== */}
+              {filteredActivityJobs.length === 0 ? (
+                <EmptyState
+                  title={
+                    jobFilter === "notApplied"
+                      ? "No not-applied jobs"
+                      : jobFilter === "applied"
+                      ? "No applied jobs"
+                      : "No jobs available"
+                  }
+                  description={
+                    jobFilter === "notApplied"
+                      ? "You have applied to all available jobs."
+                      : jobFilter === "applied"
+                      ? "You have not applied to any jobs yet."
+                      : "Check back soon — new roles are posted regularly."
+                  }
+                />
+              ) : (
 
-                if (filteredActivityJobs.length === 0) {
-                  return (
-                    <EmptyState
-                      title={
-                        jobFilter === "notApplied"
-                          ? "No not-applied jobs"
-                          : jobFilter === "applied"
-                          ? "No applied jobs"
-                          : "No jobs available"
-                      }
-                      description={
-                        jobFilter === "notApplied"
-                          ? "You have applied to all available jobs."
-                          : jobFilter === "applied"
-                          ? "You have not applied to any jobs yet."
-                          : "Check back soon — new roles are posted regularly."
-                      }
-                    />
-                  );
-                }
+                /* =========================
+                   FILTERED JOB CARDS
+                ========================== */
+                <AnimatedSection className="grid md:grid-cols-2 gap-5">
+                  {filteredActivityJobs.map((activityJob) => {
+                    const {
+                      job,
+                      jobId,
+                      jobTitle,
+                      companyName,
+                      location,
+                      employmentType,
+                    } = getJobDisplayData(activityJob);
 
-                return (
-                  <AnimatedSection className="grid md:grid-cols-2 gap-5">
-                    {filteredActivityJobs.map((activityJob) => {
-                      /*
-                       * First try to get full job information from
-                       * listJobs().
-                       */
-                      const job = jobs.find(
-                        (item) => item.id === activityJob.job_id
-                      );
+                    const isApplied =
+                      isCurrentlyApplied(activityJob);
 
-                      /*
-                       * If listJobs() doesn't contain the job
-                       * (for example a closed job), we can still
-                       * render it using candidateJobActivity().
-                       */
-                      const jobId = activityJob.job_id;
+                    const isClosed =
+                      isJobClosed(activityJob);
 
-                      const jobTitle =
-                        job?.title || activityJob.job_title;
+                    return (
+                      <AnimatedItem key={jobId}>
+                        <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
 
-                      const companyName =
-                        job?.company_name ||
-                        activityJob.company_name ||
-                        "";
-
-                      const location =
-                        job?.location ||
-                        activityJob.location ||
-                        "";
-
-                      const employmentType =
-                        job?.employment_type ||
-                        activityJob.employment_type ||
-                        "";
-
-                      const isApplied =
-                        applied.has(jobId) ||
-                        isJobApplied(activityJob);
-
-                      const isClosed =
-                        String(activityJob.status || "")
-                          .toLowerCase()
-                          .trim() === "closed";
-
-                      return (
-                        <AnimatedItem key={jobId}>
-                          <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
-                            {/* Company + Job */}
-                            <div className="flex items-start gap-3 mb-3">
-                              <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
-                                {(companyName || jobTitle)
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </div>
-
-                              <div className="min-w-0">
-                                <h3 className="font-display font-semibold text-ink leading-snug">
-                                  {jobTitle}
-                                </h3>
-
-                                {companyName && (
-                                  <p className="text-sm text-ink-muted">
-                                    {companyName}
-                                  </p>
-                                )}
-                              </div>
+                          {/* COMPANY + TITLE */}
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
+                              {(companyName || jobTitle)
+                                .charAt(0)
+                                .toUpperCase()}
                             </div>
 
-                            {/* Location + Employment */}
-                            <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
-                              {location && (
-                                <span className="flex items-center gap-1">
-                                  <MapPin size={12} />
-                                  {location}
-                                </span>
-                              )}
+                            <div className="min-w-0">
+                              <h3 className="font-display font-semibold text-ink leading-snug">
+                                {jobTitle}
+                              </h3>
 
-                              {employmentType && (
-                                <span>{employmentType}</span>
+                              {companyName && (
+                                <p className="text-sm text-ink-muted">
+                                  {companyName}
+                                </p>
                               )}
                             </div>
+                          </div>
 
-                            {/* Skills */}
-                            {job?.ai_extracted && (
-                              <div className="flex flex-wrap gap-1.5 mb-5">
-                                {job.ai_extracted.must_have_skills
-                                  .slice(0, 5)
-                                  .map((s) => (
-                                    <span
-                                      key={s}
-                                      className="text-xs px-2 py-1 rounded-full bg-canvas border border-border text-ink-muted"
-                                    >
-                                      {s}
-                                    </span>
-                                  ))}
-                              </div>
+                          {/* LOCATION + TYPE */}
+                          <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
+                            {location && (
+                              <span className="flex items-center gap-1">
+                                <MapPin size={12} />
+                                {location}
+                              </span>
                             )}
 
-                            {/* Job Status */}
-                            <div className="mb-4 flex flex-wrap gap-2">
-                              {/* Open / Closed */}
-                              <div
-                                className={`rounded-lg px-3 py-2 border ${
-                                  isClosed
-                                    ? "bg-canvas border-border text-ink-muted"
-                                    : "bg-brand-tint border-brand/20 text-brand"
-                                }`}
-                              >
-                                <span className="text-xs font-medium">
-                                  {isClosed ? "Closed" : "Open"}
-                                </span>
-                              </div>
+                            {employmentType && (
+                              <span>
+                                {employmentType}
+                              </span>
+                            )}
+                          </div>
 
-                              {/* Applied / Not Applied */}
-                              <div
-                                className={`rounded-lg px-3 py-2 border ${
-                                  isApplied
-                                    ? "bg-success-tint border-success/20"
-                                    : "bg-warning-tint border-warning/20"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {isApplied ? (
-                                    <CheckCircle2
-                                      size={15}
-                                      className="text-success"
-                                    />
-                                  ) : (
-                                    <Clock3
-                                      size={15}
-                                      className="text-warning"
-                                    />
-                                  )}
-
+                          {/* SKILLS */}
+                          {job?.ai_extracted && (
+                            <div className="flex flex-wrap gap-1.5 mb-5">
+                              {job.ai_extracted.must_have_skills
+                                .slice(0, 5)
+                                .map((s) => (
                                   <span
-                                    className={`text-xs font-medium ${
-                                      isApplied
-                                        ? "text-success"
-                                        : "text-warning"
-                                    }`}
+                                    key={s}
+                                    className="text-xs px-2 py-1 rounded-full bg-canvas border border-border text-ink-muted"
                                   >
-                                    {isApplied
-                                      ? "Applied"
-                                      : "Not Applied"}
+                                    {s}
                                   </span>
+                                ))}
+                            </div>
+                          )}
 
-                                  {isApplied &&
-                                    activityJob.application_status && (
-                                      <span className="text-xs text-ink-muted">
-                                        •{" "}
-                                        {
-                                          activityJob.application_status
-                                        }
-                                      </span>
-                                    )}
-                                </div>
-                              </div>
+                          {/* STATUS */}
+                          <div className="mb-4 flex flex-wrap gap-2">
+
+                            {/* OPEN / CLOSED */}
+                            <div
+                              className={`rounded-lg px-3 py-2 border ${
+                                isClosed
+                                  ? "bg-canvas border-border text-ink-muted"
+                                  : "bg-brand-tint border-brand/20 text-brand"
+                              }`}
+                            >
+                              <span className="text-xs font-medium">
+                                {isClosed
+                                  ? "Closed"
+                                  : "Open"}
+                              </span>
                             </div>
 
-                            {/* Apply / Closed */}
-                            <div className="mt-auto pt-4 border-t border-border">
-                              {isClosed ? (
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  disabled
-                                >
-                                  Closed
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  disabled={
-                                    applying === jobId ||
-                                    isApplied ||
-                                    !resumeId
-                                  }
-                                  onClick={() =>
-                                    handleApply(jobId)
-                                  }
+                            {/* APPLIED / NOT APPLIED */}
+                            <div
+                              className={`rounded-lg px-3 py-2 border ${
+                                isApplied
+                                  ? "bg-success-tint border-success/20"
+                                  : "bg-warning-tint border-warning/20"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+
+                                {isApplied ? (
+                                  <CheckCircle2
+                                    size={15}
+                                    className="text-success"
+                                  />
+                                ) : (
+                                  <Clock3
+                                    size={15}
+                                    className="text-warning"
+                                  />
+                                )}
+
+                                <span
+                                  className={`text-xs font-medium ${
+                                    isApplied
+                                      ? "text-success"
+                                      : "text-warning"
+                                  }`}
                                 >
                                   {isApplied
                                     ? "Applied"
-                                    : applying === jobId
-                                    ? "Applying…"
-                                    : "Apply now"}
-                                </Button>
-                              )}
+                                    : "Not Applied"}
+                                </span>
+
+                                {isApplied &&
+                                  activityJob.application_status && (
+                                    <span className="text-xs text-ink-muted">
+                                      •{" "}
+                                      {
+                                        activityJob.application_status
+                                      }
+                                    </span>
+                                  )}
+                              </div>
                             </div>
-                          </Card>
-                        </AnimatedItem>
-                      );
-                    })}
-                  </AnimatedSection>
-                );
-              })()}
+                          </div>
+
+                          {/* APPLY BUTTON */}
+                          <div className="mt-auto pt-4 border-t border-border">
+
+                            {isClosed ? (
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                disabled
+                              >
+                                Closed
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                disabled={
+                                  applying === jobId ||
+                                  isApplied ||
+                                  !resumeId
+                                }
+                                onClick={() =>
+                                  handleApply(jobId)
+                                }
+                              >
+                                {isApplied
+                                  ? "Applied"
+                                  : applying === jobId
+                                  ? "Applying…"
+                                  : "Apply now"}
+                              </Button>
+                            )}
+                          </div>
+                        </Card>
+                      </AnimatedItem>
+                    );
+                  })}
+                </AnimatedSection>
+              )}
             </>
           )}
         </div>
