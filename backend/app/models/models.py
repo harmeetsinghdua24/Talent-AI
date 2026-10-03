@@ -203,18 +203,56 @@ class ExtractedProfile(Base):
 
 class Application(Base):
     __tablename__ = "applications"
+
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
     resume_id = Column(Integer, ForeignKey("resumes.id"), nullable=True)
-    status = Column(Enum(ApplicationStatus), default=ApplicationStatus.APPLIED)
-    applied_at = Column(DateTime, default=datetime.utcnow)
 
-    job = relationship("Job", back_populates="applications")
-    candidate = relationship("Candidate", back_populates="applications")
-    match_score = relationship("MatchScore", back_populates="application", uselist=False, cascade="all, delete-orphan")
-    skill_gap = relationship("SkillGap", back_populates="application", uselist=False, cascade="all, delete-orphan")
+    status = Column(
+        Enum(ApplicationStatus),
+        default=ApplicationStatus.APPLIED
+    )
 
+    applied_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    # Offer Letter
+    offer_letter_path = Column(
+        String,
+        nullable=True
+    )
+
+    offer_letter_filename = Column(
+        String,
+        nullable=True
+    )
+
+    job = relationship(
+        "Job",
+        back_populates="applications"
+    )
+
+    candidate = relationship(
+        "Candidate",
+        back_populates="applications"
+    )
+
+    match_score = relationship(
+        "MatchScore",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    skill_gap = relationship(
+        "SkillGap",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
 
 class MatchScore(Base):
     __tablename__ = "match_scores"
