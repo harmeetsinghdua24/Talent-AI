@@ -198,8 +198,10 @@ export default function MyApplicationsPage() {
 
                     <tbody>
                       {rows.map((r) => {
+                        // Handles hired / HIRED / Hired
                         const isHired =
-                          r.status === "HIRED";
+                          String(r.status).toLowerCase() ===
+                          "hired";
 
                         const isDownloading =
                           downloadingOffer ===
