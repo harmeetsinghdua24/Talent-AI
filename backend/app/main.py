@@ -3,6 +3,8 @@ import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
+from sqlalchemy import inspect, text
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -36,8 +38,57 @@ logger = logging.getLogger("talent_ai")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create missing tables
     Base.metadata.create_all(bind=engine)
+
+    # ---------------------------------------------------------
+    # Database migration
+    # ---------------------------------------------------------
+    try:
+        inspector = inspect(engine)
+
+        if "applications" in inspector.get_table_names():
+            columns = {
+                column["name"]
+                for column in inspector.get_columns("applications")
+            }
+
+            with engine.begin() as connection:
+
+                # Add offer_letter_path if it does not exist
+                if "offer_letter_path" not in columns:
+                    logger.info(
+                        "Adding missing column: offer_letter_path"
+                    )
+
+                    connection.execute(
+                        text(
+                            "ALTER TABLE applications "
+                            "ADD COLUMN offer_letter_path VARCHAR"
+                        )
+                    )
+
+                # Add offer_letter_filename if it does not exist
+                if "offer_letter_filename" not in columns:
+                    logger.info(
+                        "Adding missing column: offer_letter_filename"
+                    )
+
+                    connection.execute(
+                        text(
+                            "ALTER TABLE applications "
+                            "ADD COLUMN offer_letter_filename VARCHAR"
+                        )
+                    )
+
+        logger.info("Database migration check completed.")
+
+    except Exception:
+        logger.exception("Database migration failed.")
+        raise
+
     logger.info("Database tables ensured.")
+
     yield
 
 

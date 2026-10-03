@@ -3,24 +3,52 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 import {
-  FileText, Sparkles, Briefcase, Star, TrendingUp, Target,
-  CalendarClock, ArrowUpRight, Video, MapPin, Phone,
+  FileText,
+  Sparkles,
+  Briefcase,
+  Star,
+  TrendingUp,
+  Target,
+  CalendarClock,
+  ArrowUpRight,
+  Video,
+  MapPin,
+  Phone,
 } from "lucide-react";
+
 import { RequireRole } from "@/components/RequireRole";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { Card } from "@/components/ui/Card";
-import { EmptyState, SkeletonCard } from "@/components/ui/Feedback";
+import {
+  EmptyState,
+  SkeletonCard,
+} from "@/components/ui/Feedback";
 import { StatCard } from "@/components/ui/StatCard";
 import { Button } from "@/components/ui/Button";
 import { TiltCard } from "@/components/ui/TiltCard";
-import { Reveal, StaggerGrid, StaggerItem } from "@/components/ui/Motion";
+import {
+  Reveal,
+  StaggerGrid,
+  StaggerItem,
+} from "@/components/ui/Motion";
 import { api, InterviewData } from "@/lib/api";
 
-type DashboardData = Awaited<ReturnType<typeof api.candidateDashboard>>;
+type DashboardData =
+  Awaited<ReturnType<typeof api.candidateDashboard>>;
+
 type Rec = {
   job_id: number;
   job_title: string;
@@ -43,26 +71,96 @@ const modeIcon = {
 };
 
 export default function CandidateDashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] =
+    useState<DashboardData | null>(null);
+
   const [interviews, setInterviews] = useState<
     (InterviewData & {
       job_title: string;
       company_name?: string | null;
     })[]
   >([]);
-  const [recommendations, setRecommendations] = useState<Rec[]>([]);
+
+  const [recommendations, setRecommendations] =
+    useState<Rec[]>([]);
 
   useEffect(() => {
-    api.candidateDashboard().then(setData);
-    api.myInterviews().then(setInterviews);
-    api.recommendedJobs().then((r) =>
-      setRecommendations(r.results.slice(0, 3))
-    );
+    const loadDashboard = async () => {
+      // ---------------------------------------------
+      // Candidate Dashboard
+      // ---------------------------------------------
+      try {
+        const dashboard =
+          await api.candidateDashboard();
+
+        setData(dashboard);
+      } catch (error) {
+        console.error(
+          "Candidate dashboard failed:",
+          error
+        );
+
+        // Prevent infinite skeleton loading
+        setData({
+          total_applications: 0,
+          shortlisted: 0,
+          rejected: 0,
+          under_review: 0,
+          hired: 0,
+          opportunities_count: 0,
+          average_match_score: 0,
+          status_breakdown: [],
+          applications_timeline: [],
+        });
+      }
+
+      // ---------------------------------------------
+      // Interviews
+      // ---------------------------------------------
+      try {
+        const interviewData =
+          await api.myInterviews();
+
+        setInterviews(interviewData);
+      } catch (error) {
+        console.error(
+          "Interviews failed:",
+          error
+        );
+
+        setInterviews([]);
+      }
+
+      // ---------------------------------------------
+      // Recommendations
+      // ---------------------------------------------
+      try {
+        const recommendationData =
+          await api.recommendedJobs();
+
+        setRecommendations(
+          recommendationData.results?.slice(0, 3) ?? []
+        );
+      } catch (error) {
+        console.error(
+          "Recommendations failed:",
+          error
+        );
+
+        setRecommendations([]);
+      }
+    };
+
+    loadDashboard();
   }, []);
 
-  const hasApplications = (data?.total_applications ?? 0) > 0;
+  const hasApplications =
+    (data?.total_applications ?? 0) > 0;
+
   const pieData =
-    data?.status_breakdown.filter((s) => s.count > 0) ?? [];
+    data?.status_breakdown.filter(
+      (s) => s.count > 0
+    ) ?? [];
 
   return (
     <RequireRole role="candidate">
@@ -73,14 +171,21 @@ export default function CandidateDashboardPage() {
         />
 
         <div className="px-6 sm:px-8 pb-10 space-y-8">
+          {/* Loading state */}
           {data === null ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
+              {Array.from({ length: 4 }).map(
+                (_, i) => (
+                  <SkeletonCard key={i} />
+                )
+              )}
             </div>
           ) : (
             <>
+              {/* --------------------------------------- */}
+              {/* Stats */}
+              {/* --------------------------------------- */}
+
               <StaggerGrid className="grid grid-cols-2 md:grid-cols-4 gap-5">
                 <StaggerItem>
                   <TiltCard>
@@ -130,6 +235,10 @@ export default function CandidateDashboardPage() {
                 </StaggerItem>
               </StaggerGrid>
 
+              {/* --------------------------------------- */}
+              {/* Application Analytics */}
+              {/* --------------------------------------- */}
+
               {!hasApplications ? (
                 <Reveal>
                   <Card className="p-8">
@@ -140,7 +249,8 @@ export default function CandidateDashboardPage() {
                       action={
                         <Link href="/candidate/resume">
                           <Button>
-                            <Sparkles size={15} /> Upload resume
+                            <Sparkles size={15} />
+                            Upload resume
                           </Button>
                         </Link>
                       }
@@ -149,13 +259,17 @@ export default function CandidateDashboardPage() {
                 </Reveal>
               ) : (
                 <div className="grid lg:grid-cols-2 gap-6">
+                  {/* Status Breakdown */}
                   <Reveal>
                     <Card className="p-6">
                       <h3 className="font-display font-semibold text-ink mb-4">
                         Application status breakdown
                       </h3>
 
-                      <ResponsiveContainer width="100%" height={260}>
+                      <ResponsiveContainer
+                        width="100%"
+                        height={260}
+                      >
                         <PieChart>
                           <Pie
                             data={pieData}
@@ -167,21 +281,26 @@ export default function CandidateDashboardPage() {
                             outerRadius={90}
                             paddingAngle={3}
                           >
-                            {pieData.map((entry) => (
-                              <Cell
-                                key={entry.status}
-                                fill={
-                                  STATUS_COLORS[entry.status] ??
-                                  "var(--ink-faint)"
-                                }
-                              />
-                            ))}
+                            {pieData.map(
+                              (entry) => (
+                                <Cell
+                                  key={entry.status}
+                                  fill={
+                                    STATUS_COLORS[
+                                      entry.status
+                                    ] ??
+                                    "var(--ink-faint)"
+                                  }
+                                />
+                              )
+                            )}
                           </Pie>
 
                           <Tooltip
                             contentStyle={{
                               borderRadius: 10,
-                              border: "1px solid var(--border)",
+                              border:
+                                "1px solid var(--border)",
                               fontSize: 13,
                             }}
                           />
@@ -192,7 +311,8 @@ export default function CandidateDashboardPage() {
                             formatter={(value) => (
                               <span
                                 style={{
-                                  color: "var(--ink-muted)",
+                                  color:
+                                    "var(--ink-muted)",
                                   fontSize: 12,
                                 }}
                               >
@@ -205,14 +325,22 @@ export default function CandidateDashboardPage() {
                     </Card>
                   </Reveal>
 
+                  {/* Match Score */}
                   <Reveal delay={0.1}>
                     <Card className="p-6">
                       <h3 className="font-display font-semibold text-ink mb-4">
                         Match score per application
                       </h3>
 
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={data.applications_timeline}>
+                      <ResponsiveContainer
+                        width="100%"
+                        height={260}
+                      >
+                        <BarChart
+                          data={
+                            data.applications_timeline
+                          }
+                        >
                           <CartesianGrid
                             strokeDasharray="3 3"
                             stroke="var(--border)"
@@ -226,7 +354,8 @@ export default function CandidateDashboardPage() {
                               fill: "var(--ink-muted)",
                             }}
                             axisLine={{
-                              stroke: "var(--border)",
+                              stroke:
+                                "var(--border)",
                             }}
                             tickLine={false}
                             interval={0}
@@ -248,7 +377,8 @@ export default function CandidateDashboardPage() {
                           <Tooltip
                             contentStyle={{
                               borderRadius: 10,
-                              border: "1px solid var(--border)",
+                              border:
+                                "1px solid var(--border)",
                               fontSize: 13,
                             }}
                             formatter={(value) => [
@@ -260,7 +390,12 @@ export default function CandidateDashboardPage() {
                           <Bar
                             dataKey="match_score"
                             fill="var(--brand)"
-                            radius={[6, 6, 0, 0]}
+                            radius={[
+                              6,
+                              6,
+                              0,
+                              0,
+                            ]}
                           />
                         </BarChart>
                       </ResponsiveContainer>
@@ -269,7 +404,12 @@ export default function CandidateDashboardPage() {
                 </div>
               )}
 
+              {/* --------------------------------------- */}
+              {/* Interviews + Recommendations */}
+              {/* --------------------------------------- */}
+
               <div className="grid lg:grid-cols-2 gap-6">
+                {/* Upcoming Interviews */}
                 <Reveal delay={0.15}>
                   <Card className="p-6 h-full">
                     <div className="flex items-center justify-between mb-4">
@@ -286,69 +426,79 @@ export default function CandidateDashboardPage() {
                           href="/candidate/applications"
                           className="text-xs text-brand hover:text-brand-hover flex items-center gap-0.5"
                         >
-                          View all <ArrowUpRight size={12} />
+                          View all
+                          <ArrowUpRight size={12} />
                         </Link>
                       )}
                     </div>
 
                     {interviews.length === 0 ? (
                       <EmptyState
-                        icon={<CalendarClock size={28} />}
+                        icon={
+                          <CalendarClock size={28} />
+                        }
                         title="No interviews scheduled"
                         description="Interviews you're invited to will show up here."
                       />
                     ) : (
                       <div className="space-y-3">
-                        {interviews.slice(0, 3).map((iv) => {
-                          const Icon =
-                            modeIcon[
-                              iv.mode as keyof typeof modeIcon
-                            ] ?? Video;
+                        {interviews
+                          .slice(0, 3)
+                          .map((iv) => {
+                            const Icon =
+                              modeIcon[
+                                iv.mode as keyof typeof modeIcon
+                              ] ?? Video;
 
-                          return (
-                            <div
-                              key={iv.id}
-                              className="flex items-center gap-3 bg-canvas rounded-xl p-3.5"
-                            >
-                              <div className="w-10 h-10 rounded-lg bg-brand-tint text-brand flex items-center justify-center shrink-0">
-                                <Icon size={16} />
-                              </div>
+                            return (
+                              <div
+                                key={iv.id}
+                                className="flex items-center gap-3 bg-canvas rounded-xl p-3.5"
+                              >
+                                <div className="w-10 h-10 rounded-lg bg-brand-tint text-brand flex items-center justify-center shrink-0">
+                                  <Icon size={16} />
+                                </div>
 
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-ink truncate">
-                                  {iv.job_title}
-                                </p>
-
-                                <p className="text-xs text-ink-muted">
-                                  {iv.company_name
-                                    ? `${iv.company_name} · `
-                                    : ""}
-                                  {new Date(
-                                    iv.scheduled_at
-                                  ).toLocaleString(undefined, {
-                                    dateStyle: "medium",
-                                    timeStyle: "short",
-                                  })}
-                                </p>
-
-                                {/* Interview Notes */}
-                                {iv.notes && (
-                                  <p className="text-xs text-ink-muted mt-1">
-                                    <span className="font-medium text-ink">
-                                      Notes:
-                                    </span>{" "}
-                                    {iv.notes}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-ink truncate">
+                                    {iv.job_title}
                                   </p>
-                                )}
+
+                                  <p className="text-xs text-ink-muted">
+                                    {iv.company_name
+                                      ? `${iv.company_name} · `
+                                      : ""}
+                                    {new Date(
+                                      iv.scheduled_at
+                                    ).toLocaleString(
+                                      undefined,
+                                      {
+                                        dateStyle:
+                                          "medium",
+                                        timeStyle:
+                                          "short",
+                                      }
+                                    )}
+                                  </p>
+
+                                  {iv.notes && (
+                                    <p className="text-xs text-ink-muted mt-1">
+                                      <span className="font-medium text-ink">
+                                        Notes:
+                                      </span>{" "}
+                                      {iv.notes}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     )}
                   </Card>
                 </Reveal>
 
+                {/* Top Job Matches */}
                 <Reveal delay={0.2}>
                   <Card className="p-6 h-full">
                     <div className="flex items-center justify-between mb-4">
@@ -365,7 +515,8 @@ export default function CandidateDashboardPage() {
                           href="/candidate/recommendations"
                           className="text-xs text-brand hover:text-brand-hover flex items-center gap-0.5"
                         >
-                          View all <ArrowUpRight size={12} />
+                          View all
+                          <ArrowUpRight size={12} />
                         </Link>
                       )}
                     </div>
@@ -378,28 +529,30 @@ export default function CandidateDashboardPage() {
                       />
                     ) : (
                       <div className="space-y-3">
-                        {recommendations.map((rec) => (
-                          <div
-                            key={rec.job_id}
-                            className="flex items-center justify-between bg-canvas rounded-xl p-3.5"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-ink truncate">
-                                {rec.job_title}
-                              </p>
-
-                              {rec.company_name && (
-                                <p className="text-xs text-ink-muted truncate">
-                                  {rec.company_name}
+                        {recommendations.map(
+                          (rec) => (
+                            <div
+                              key={rec.job_id}
+                              className="flex items-center justify-between bg-canvas rounded-xl p-3.5"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-ink truncate">
+                                  {rec.job_title}
                                 </p>
-                              )}
-                            </div>
 
-                            <span className="font-display font-bold text-brand text-sm shrink-0 ml-3">
-                              {rec.match_score}%
-                            </span>
-                          </div>
-                        ))}
+                                {rec.company_name && (
+                                  <p className="text-xs text-ink-muted truncate">
+                                    {rec.company_name}
+                                  </p>
+                                )}
+                              </div>
+
+                              <span className="font-display font-bold text-brand text-sm shrink-0 ml-3">
+                                {rec.match_score}%
+                              </span>
+                            </div>
+                          )
+                        )}
                       </div>
                     )}
                   </Card>
