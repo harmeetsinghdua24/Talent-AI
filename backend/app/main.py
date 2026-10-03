@@ -42,19 +42,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# --- CORS ---
-# Keep origins from environment/settings and explicitly allow
-# the local Next.js frontend during development.
+
+# ---------------------------------------------------------
+# CORS
+# ---------------------------------------------------------
+
 configured_origins = settings.CORS_ORIGINS or []
 
 allowed_origins = list(configured_origins)
 
+# Local development
 for origin in [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]:
     if origin not in allowed_origins:
         allowed_origins.append(origin)
+
+# Production frontend
+production_frontend = "https://talent-ai-eight.vercel.app"
+
+if production_frontend not in allowed_origins:
+    allowed_origins.append(production_frontend)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,18 +75,23 @@ app.add_middleware(
 )
 
 
-# --- Minimal in-memory rate limiting (per-process; use Redis in production) ---
+# ---------------------------------------------------------
+# Minimal in-memory rate limiting
+# ---------------------------------------------------------
+
 _request_log: dict[str, list[float]] = defaultdict(list)
 
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
+
     now = time.time()
     window = 60
 
     _request_log[client_ip] = [
-        t for t in _request_log[client_ip]
+        t
+        for t in _request_log[client_ip]
         if now - t < window
     ]
 
@@ -91,6 +106,10 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ---------------------------------------------------------
+# Health check
+# ---------------------------------------------------------
+
 @app.get("/health")
 def health():
     return {
@@ -99,14 +118,61 @@ def health():
     }
 
 
-app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
-app.include_router(jobs.router, prefix=settings.API_V1_PREFIX)
-app.include_router(resumes.router, prefix=settings.API_V1_PREFIX)
-app.include_router(ranking.router, prefix=settings.API_V1_PREFIX)
-app.include_router(ranking.compare_router, prefix=settings.API_V1_PREFIX)
-app.include_router(analytics.router, prefix=settings.API_V1_PREFIX)
-app.include_router(recommendations.router, prefix=settings.API_V1_PREFIX)
-app.include_router(screening.router, prefix=settings.API_V1_PREFIX)
-app.include_router(interviews.router, prefix=settings.API_V1_PREFIX)
-app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
-app.include_router(offers.router, prefix=settings.API_V1_PREFIX)
+# ---------------------------------------------------------
+# API Routers
+# ---------------------------------------------------------
+
+app.include_router(
+    auth.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    jobs.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    resumes.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    ranking.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    ranking.compare_router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    analytics.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    recommendations.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    screening.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    interviews.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    notifications.router,
+    prefix=settings.API_V1_PREFIX,
+)
+
+app.include_router(
+    offers.router,
+    prefix=settings.API_V1_PREFIX,
+)
