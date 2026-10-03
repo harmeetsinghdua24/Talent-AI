@@ -11,11 +11,22 @@ import { Reveal } from "@/components/ui/Motion";
 import { api, InterviewData } from "@/lib/api";
 
 type AppRow = Awaited<ReturnType<typeof api.myApplications>>[number];
-const modeIcon = { online: Video, in_person: MapPin, phone: Phone };
+
+const modeIcon = {
+  online: Video,
+  in_person: MapPin,
+  phone: Phone,
+};
 
 export default function MyApplicationsPage() {
   const [rows, setRows] = useState<AppRow[] | null>(null);
-  const [interviews, setInterviews] = useState<(InterviewData & { job_title: string; company_name?: string | null })[]>([]);
+
+  const [interviews, setInterviews] = useState<
+    (InterviewData & {
+      job_title: string;
+      company_name?: string | null;
+    })[]
+  >([]);
 
   useEffect(() => {
     api.myApplications().then(setRows);
@@ -25,28 +36,71 @@ export default function MyApplicationsPage() {
   return (
     <RequireRole role="candidate">
       <AppShell>
-        <PageHeader title="Applications" description="Track every role you've applied to." />
+        <PageHeader
+          title="Applications"
+          description="Track every role you've applied to."
+        />
+
         <div className="px-6 sm:px-8 pb-10 space-y-6">
           {interviews.length > 0 && (
             <Reveal>
               <Card className="p-6">
                 <h3 className="font-display font-semibold text-ink mb-4 flex items-center gap-2">
-                  <CalendarClock size={16} className="text-brand" /> Upcoming Interviews
+                  <CalendarClock size={16} className="text-brand" />
+                  Upcoming Interviews
                 </h3>
+
                 <div className="grid md:grid-cols-2 gap-3">
                   {interviews.map((iv) => {
-                    const Icon = modeIcon[iv.mode as keyof typeof modeIcon] ?? Video;
+                    const Icon =
+                      modeIcon[iv.mode as keyof typeof modeIcon] ?? Video;
+
                     return (
-                      <div key={iv.id} className="bg-canvas rounded-lg p-4">
-                        <p className="font-medium text-ink">{iv.job_title}</p>
-                        {iv.company_name && <p className="text-xs text-ink-muted">{iv.company_name}</p>}
+                      <div
+                        key={iv.id}
+                        className="bg-canvas rounded-lg p-4"
+                      >
+                        <p className="font-medium text-ink">
+                          {iv.job_title}
+                        </p>
+
+                        {iv.company_name && (
+                          <p className="text-xs text-ink-muted">
+                            {iv.company_name}
+                          </p>
+                        )}
+
                         <p className="text-sm text-ink-muted mt-1">
-                          {new Date(iv.scheduled_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                          {new Date(iv.scheduled_at).toLocaleString(
+                            undefined,
+                            {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }
+                          )}
                         </p>
+
                         <p className="text-xs text-ink-muted mt-1 flex items-center gap-1.5 capitalize">
-                          <Icon size={12} /> {iv.mode.replace("_", " ")} · {iv.duration_minutes} min
+                          <Icon size={12} />
+                          {iv.mode.replace("_", " ")} ·{" "}
+                          {iv.duration_minutes} min
                         </p>
-                        {iv.location_or_link && <p className="text-xs text-brand mt-1 truncate">{iv.location_or_link}</p>}
+
+                        {iv.location_or_link && (
+                          <p className="text-xs text-brand mt-1 truncate">
+                            {iv.location_or_link}
+                          </p>
+                        )}
+
+                        {/* Interview Notes */}
+                        {iv.notes && (
+                          <p className="text-xs text-ink-muted mt-2">
+                            <span className="font-medium text-ink">
+                              Notes:
+                            </span>{" "}
+                            {iv.notes}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -69,33 +123,53 @@ export default function MyApplicationsPage() {
             />
           ) : (
             <Reveal>
-            <Card className="overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs font-semibold text-ink-muted uppercase tracking-wide bg-canvas/50">
-                    <th className="px-5 py-3">Job</th>
-                    <th className="px-5 py-3">Match score</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Applied</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.application_id} className="border-b border-border last:border-0">
-                      <td className="px-5 py-4 font-medium text-ink">
-                        {r.job_title}
-                        {r.company_name && <span className="block text-xs text-ink-muted font-normal">{r.company_name}</span>}
-                      </td>
-                      <td className="px-5 py-4 font-semibold text-brand">{r.match_score !== null ? `${r.match_score}%` : "—"}</td>
-                      <td className="px-5 py-4">
-                        <Badge tone={statusTone(r.status)}>{r.status.replace("_", " ")}</Badge>
-                      </td>
-                      <td className="px-5 py-4 text-ink-muted">{new Date(r.applied_at).toLocaleDateString()}</td>
+              <Card className="overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs font-semibold text-ink-muted uppercase tracking-wide bg-canvas/50">
+                      <th className="px-5 py-3">Job</th>
+                      <th className="px-5 py-3">Match score</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Applied</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
+                  </thead>
+
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr
+                        key={r.application_id}
+                        className="border-b border-border last:border-0"
+                      >
+                        <td className="px-5 py-4 font-medium text-ink">
+                          {r.job_title}
+
+                          {r.company_name && (
+                            <span className="block text-xs text-ink-muted font-normal">
+                              {r.company_name}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4 font-semibold text-brand">
+                          {r.match_score !== null
+                            ? `${r.match_score}%`
+                            : "—"}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <Badge tone={statusTone(r.status)}>
+                            {r.status.replace("_", " ")}
+                          </Badge>
+                        </td>
+
+                        <td className="px-5 py-4 text-ink-muted">
+                          {new Date(r.applied_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
             </Reveal>
           )}
         </div>
