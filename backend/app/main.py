@@ -23,11 +23,16 @@ from app.api.routers import (
 )
 from app.models import models  # noqa: F401 - ensures models are registered on Base
 
+
 settings = get_settings()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("talent_ai")
 
+
+# ---------------------------------------------------------
+# Application lifespan
+# ---------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,12 +64,13 @@ for origin in [
     if origin not in allowed_origins:
         allowed_origins.append(origin)
 
-# Production frontend
+# Production Vercel frontend
 production_frontend = "https://talent-ai-eight.vercel.app"
 
 if production_frontend not in allowed_origins:
     allowed_origins.append(production_frontend)
 
+logger.info("Allowed CORS origins: %s", allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
