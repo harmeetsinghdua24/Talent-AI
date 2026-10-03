@@ -14,7 +14,10 @@ import { AppShell, PageHeader } from "@/components/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/Feedback";
-import { AnimatedSection, AnimatedItem } from "@/components/ui/Motion";
+import {
+  AnimatedSection,
+  AnimatedItem,
+} from "@/components/ui/Motion";
 import { useToast } from "@/components/ui/Toast";
 import { api, ApiError, JobOut } from "@/lib/api";
 
@@ -50,25 +53,20 @@ export default function CandidateJobsPage() {
   const [resumeId, setResumeId] = useState<number | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
 
-  // Local applied state.
-  // This makes the UI update immediately after Apply.
   const [applied, setApplied] = useState<Set<number>>(new Set());
-
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
 
-  /*
-   * Load jobs + resume + candidate activity
-   */
   useEffect(() => {
     let mounted = true;
 
     async function loadData() {
       try {
-        const [jobsData, resumes, activityData] = await Promise.all([
-          api.listJobs(),
-          api.myResumes(),
-          api.candidateJobActivity(),
-        ]);
+        const [jobsData, resumes, activityData] =
+          await Promise.all([
+            api.listJobs(),
+            api.myResumes(),
+            api.candidateJobActivity(),
+          ]);
 
         if (!mounted) return;
 
@@ -80,9 +78,6 @@ export default function CandidateJobsPage() {
 
         setActivity(activityData);
 
-        /*
-         * Initialize local applied set from backend activity.
-         */
         const appliedIds = new Set<number>();
 
         for (const job of activityData.jobs || []) {
@@ -93,9 +88,6 @@ export default function CandidateJobsPage() {
 
         setApplied(appliedIds);
       } catch {
-        /*
-         * If activity fails, still try to load the normal jobs list.
-         */
         try {
           const jobsData = await api.listJobs();
 
@@ -103,7 +95,7 @@ export default function CandidateJobsPage() {
 
           setJobs(jobsData);
         } catch {
-          // Ignore. Existing page behavior handles empty/loading state.
+          // Ignore
         }
       }
     }
@@ -115,14 +107,6 @@ export default function CandidateJobsPage() {
     };
   }, []);
 
-  /*
-   * Backend may return:
-   * true / false
-   * "true" / "false"
-   * 1 / 0
-   * "1" / "0"
-   * yes / no
-   */
   function isJobApplied(job: JobActivity) {
     const value = job.applied;
 
@@ -144,48 +128,44 @@ export default function CandidateJobsPage() {
     return false;
   }
 
-  /*
-   * A job is considered applied if either:
-   * 1. backend says applied
-   * 2. user just applied during this session
-   */
   function isCurrentlyApplied(job: JobActivity) {
     return applied.has(job.job_id) || isJobApplied(job);
   }
 
   /*
-   * Filter activity jobs.
-   *
    * IMPORTANT:
-   * We use candidateJobActivity() as the source of truth here.
-   * This is important because a CLOSED job may not exist in listJobs(),
-   * but it can still exist in candidate activity.
+   * Backend activity.jobs is the source of truth.
+   *
+   * Backend example:
+   * Job 2 -> applied: true
+   * Job 1 -> applied: false
+   *
+   * Therefore Not Applied must show Job 1.
    */
   const filteredActivityJobs = useMemo(() => {
-    if (!activity?.jobs) {
-      return [];
-    }
-
-    const activityJobs = activity.jobs;
+    if (!activity) return [];
 
     if (jobFilter === "notApplied") {
-      return activityJobs.filter(
-        (job) => !isCurrentlyApplied(job)
+      return activity.jobs.filter(
+        (job) => !isJobApplied(job)
       );
     }
 
     if (jobFilter === "applied") {
-      return activityJobs.filter(
+      return activity.jobs.filter(
         (job) => isCurrentlyApplied(job)
       );
     }
 
-    return activityJobs;
+    return activity.jobs;
   }, [activity, jobFilter, applied]);
 
   async function handleApply(jobId: number) {
     if (!resumeId) {
-      show("Upload a resume before applying.", "error");
+      show(
+        "Upload a resume before applying.",
+        "error"
+      );
       return;
     }
 
@@ -194,27 +174,18 @@ export default function CandidateJobsPage() {
     try {
       await api.applyToJob(jobId, resumeId);
 
-      /*
-       * Immediately mark as applied locally.
-       */
       setApplied((prev) => {
         const next = new Set(prev);
         next.add(jobId);
         return next;
       });
 
-      /*
-       * Refresh activity from backend.
-       */
       try {
         const updatedActivity =
           await api.candidateJobActivity();
 
         setActivity(updatedActivity);
 
-        /*
-         * Rebuild applied IDs from fresh backend response.
-         */
         const backendAppliedIds = new Set<number>();
 
         for (const job of updatedActivity.jobs || []) {
@@ -225,9 +196,7 @@ export default function CandidateJobsPage() {
 
         setApplied(backendAppliedIds);
       } catch {
-        /*
-         * Application succeeded even if activity refresh fails.
-         */
+        // Application succeeded even if refresh fails.
       }
 
       show(
@@ -236,7 +205,9 @@ export default function CandidateJobsPage() {
       );
     } catch (err) {
       show(
-        err instanceof ApiError ? err.message : "Could not apply.",
+        err instanceof ApiError
+          ? err.message
+          : "Could not apply.",
         "error"
       );
     } finally {
@@ -244,14 +215,9 @@ export default function CandidateJobsPage() {
     }
   }
 
-  /*
-   * Convert activity job into display information.
-   *
-   * We first use listJobs() data when available.
-   * If the job is closed and missing from listJobs(),
-   * activity data is used instead.
-   */
-  function getJobDisplayData(activityJob: JobActivity) {
+  function getJobDisplayData(
+    activityJob: JobActivity
+  ) {
     const job = jobs?.find(
       (item) => item.id === activityJob.job_id
     );
@@ -282,10 +248,9 @@ export default function CandidateJobsPage() {
     };
   }
 
-  /*
-   * Determine whether job is closed.
-   */
-  function isJobClosed(activityJob: JobActivity) {
+  function isJobClosed(
+    activityJob: JobActivity
+  ) {
     const status = String(
       activityJob.status || ""
     )
@@ -328,9 +293,7 @@ export default function CandidateJobsPage() {
               </div>
             )}
 
-          {/* =========================
-              JOB ACTIVITY
-          ========================== */}
+          {/* JOB ACTIVITY */}
           {activity && (
             <div className="mb-8">
               <div className="mb-4">
@@ -345,7 +308,7 @@ export default function CandidateJobsPage() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 
-                {/* TOTAL JOBS */}
+                {/* TOTAL */}
                 <Card
                   className={`p-5 transition-all ${
                     jobFilter === "all"
@@ -419,7 +382,9 @@ export default function CandidateJobsPage() {
                 >
                   <button
                     type="button"
-                    onClick={() => setJobFilter("notApplied")}
+                    onClick={() =>
+                      setJobFilter("notApplied")
+                    }
                     className="w-full text-left"
                   >
                     <div className="flex items-center justify-between">
@@ -460,22 +425,19 @@ export default function CandidateJobsPage() {
                     />
                   </div>
                 </Card>
+
               </div>
             </div>
           )}
 
-          {/* =========================
-              LOADING
-          ========================== */}
+          {/* LOADING */}
           {jobs === null ? (
             <p className="text-sm text-ink-muted">
               Loading jobs…
             </p>
           ) : activity === null ? (
 
-            /* =========================
-               ACTIVITY API NOT AVAILABLE
-            ========================== */
+            /* ACTIVITY API NOT AVAILABLE */
             jobs.length === 0 ? (
               <EmptyState
                 title="No open jobs right now"
@@ -560,6 +522,7 @@ export default function CandidateJobsPage() {
                             Apply now
                           </Button>
                         </div>
+
                       </Card>
                     </AnimatedItem>
                   ))}
@@ -569,9 +532,7 @@ export default function CandidateJobsPage() {
 
           ) : (
 
-            /* =========================
-               ACTIVITY VIEW
-            ========================== */
+            /* ACTIVITY VIEW */
             <>
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -603,9 +564,7 @@ export default function CandidateJobsPage() {
                 )}
               </div>
 
-              {/* =========================
-                  EMPTY FILTER STATE
-              ========================== */}
+              {/* EMPTY STATE */}
               {filteredActivityJobs.length === 0 ? (
                 <EmptyState
                   title={
@@ -625,184 +584,185 @@ export default function CandidateJobsPage() {
                 />
               ) : (
 
-                /* =========================
-                   FILTERED JOB CARDS
-                ========================== */
+                /* JOB CARDS */
                 <AnimatedSection className="grid md:grid-cols-2 gap-5">
-                  {filteredActivityJobs.map((activityJob) => {
-                    const {
-                      job,
-                      jobId,
-                      jobTitle,
-                      companyName,
-                      location,
-                      employmentType,
-                    } = getJobDisplayData(activityJob);
+                  {filteredActivityJobs.map(
+                    (activityJob) => {
+                      const {
+                        job,
+                        jobId,
+                        jobTitle,
+                        companyName,
+                        location,
+                        employmentType,
+                      } = getJobDisplayData(activityJob);
 
-                    const isApplied =
-                      isCurrentlyApplied(activityJob);
+                      const isApplied =
+                        isCurrentlyApplied(activityJob);
 
-                    const isClosed =
-                      isJobClosed(activityJob);
+                      const isClosed =
+                        isJobClosed(activityJob);
 
-                    return (
-                      <AnimatedItem key={jobId}>
-                        <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
+                      return (
+                        <AnimatedItem key={jobId}>
+                          <Card className="p-6 flex flex-col transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover hover:border-border-strong">
 
-                          {/* COMPANY + TITLE */}
-                          <div className="flex items-start gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
-                              {(companyName || jobTitle)
-                                .charAt(0)
-                                .toUpperCase()}
+                            {/* COMPANY + TITLE */}
+                            <div className="flex items-start gap-3 mb-3">
+                              <div className="w-10 h-10 rounded-xl bg-brand-tint text-brand flex items-center justify-center font-display font-bold shrink-0">
+                                {(companyName || jobTitle)
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+
+                              <div className="min-w-0">
+                                <h3 className="font-display font-semibold text-ink leading-snug">
+                                  {jobTitle}
+                                </h3>
+
+                                {companyName && (
+                                  <p className="text-sm text-ink-muted">
+                                    {companyName}
+                                  </p>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="min-w-0">
-                              <h3 className="font-display font-semibold text-ink leading-snug">
-                                {jobTitle}
-                              </h3>
+                            {/* LOCATION + TYPE */}
+                            <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
+                              {location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin size={12} />
+                                  {location}
+                                </span>
+                              )}
 
-                              {companyName && (
-                                <p className="text-sm text-ink-muted">
-                                  {companyName}
-                                </p>
+                              {employmentType && (
+                                <span>
+                                  {employmentType}
+                                </span>
                               )}
                             </div>
-                          </div>
 
-                          {/* LOCATION + TYPE */}
-                          <div className="flex items-center gap-3 text-xs text-ink-muted mb-4">
-                            {location && (
-                              <span className="flex items-center gap-1">
-                                <MapPin size={12} />
-                                {location}
-                              </span>
+                            {/* SKILLS */}
+                            {job?.ai_extracted && (
+                              <div className="flex flex-wrap gap-1.5 mb-5">
+                                {job.ai_extracted.must_have_skills
+                                  .slice(0, 5)
+                                  .map((s) => (
+                                    <span
+                                      key={s}
+                                      className="text-xs px-2 py-1 rounded-full bg-canvas border border-border text-ink-muted"
+                                    >
+                                      {s}
+                                    </span>
+                                  ))}
+                              </div>
                             )}
 
-                            {employmentType && (
-                              <span>
-                                {employmentType}
-                              </span>
-                            )}
-                          </div>
+                            {/* STATUS */}
+                            <div className="mb-4 flex flex-wrap gap-2">
 
-                          {/* SKILLS */}
-                          {job?.ai_extracted && (
-                            <div className="flex flex-wrap gap-1.5 mb-5">
-                              {job.ai_extracted.must_have_skills
-                                .slice(0, 5)
-                                .map((s) => (
+                              {/* OPEN / CLOSED */}
+                              <div
+                                className={`rounded-lg px-3 py-2 border ${
+                                  isClosed
+                                    ? "bg-canvas border-border text-ink-muted"
+                                    : "bg-brand-tint border-brand/20 text-brand"
+                                }`}
+                              >
+                                <span className="text-xs font-medium">
+                                  {isClosed
+                                    ? "Closed"
+                                    : "Open"}
+                                </span>
+                              </div>
+
+                              {/* APPLIED / NOT APPLIED */}
+                              <div
+                                className={`rounded-lg px-3 py-2 border ${
+                                  isApplied
+                                    ? "bg-success-tint border-success/20"
+                                    : "bg-warning-tint border-warning/20"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+
+                                  {isApplied ? (
+                                    <CheckCircle2
+                                      size={15}
+                                      className="text-success"
+                                    />
+                                  ) : (
+                                    <Clock3
+                                      size={15}
+                                      className="text-warning"
+                                    />
+                                  )}
+
                                   <span
-                                    key={s}
-                                    className="text-xs px-2 py-1 rounded-full bg-canvas border border-border text-ink-muted"
+                                    className={`text-xs font-medium ${
+                                      isApplied
+                                        ? "text-success"
+                                        : "text-warning"
+                                    }`}
                                   >
-                                    {s}
+                                    {isApplied
+                                      ? "Applied"
+                                      : "Not Applied"}
                                   </span>
-                                ))}
-                            </div>
-                          )}
 
-                          {/* STATUS */}
-                          <div className="mb-4 flex flex-wrap gap-2">
+                                  {isApplied &&
+                                    activityJob.application_status && (
+                                      <span className="text-xs text-ink-muted">
+                                        •{" "}
+                                        {
+                                          activityJob.application_status
+                                        }
+                                      </span>
+                                    )}
 
-                            {/* OPEN / CLOSED */}
-                            <div
-                              className={`rounded-lg px-3 py-2 border ${
-                                isClosed
-                                  ? "bg-canvas border-border text-ink-muted"
-                                  : "bg-brand-tint border-brand/20 text-brand"
-                              }`}
-                            >
-                              <span className="text-xs font-medium">
-                                {isClosed
-                                  ? "Closed"
-                                  : "Open"}
-                              </span>
+                                </div>
+                              </div>
                             </div>
 
-                            {/* APPLIED / NOT APPLIED */}
-                            <div
-                              className={`rounded-lg px-3 py-2 border ${
-                                isApplied
-                                  ? "bg-success-tint border-success/20"
-                                  : "bg-warning-tint border-warning/20"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-
-                                {isApplied ? (
-                                  <CheckCircle2
-                                    size={15}
-                                    className="text-success"
-                                  />
-                                ) : (
-                                  <Clock3
-                                    size={15}
-                                    className="text-warning"
-                                  />
-                                )}
-
-                                <span
-                                  className={`text-xs font-medium ${
-                                    isApplied
-                                      ? "text-success"
-                                      : "text-warning"
-                                  }`}
+                            {/* APPLY BUTTON */}
+                            <div className="mt-auto pt-4 border-t border-border">
+                              {isClosed ? (
+                                <Button
+                                  size="sm"
+                                  className="w-full"
+                                  disabled
+                                >
+                                  Closed
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="w-full"
+                                  disabled={
+                                    applying === jobId ||
+                                    isApplied ||
+                                    !resumeId
+                                  }
+                                  onClick={() =>
+                                    handleApply(jobId)
+                                  }
                                 >
                                   {isApplied
                                     ? "Applied"
-                                    : "Not Applied"}
-                                </span>
-
-                                {isApplied &&
-                                  activityJob.application_status && (
-                                    <span className="text-xs text-ink-muted">
-                                      •{" "}
-                                      {
-                                        activityJob.application_status
-                                      }
-                                    </span>
-                                  )}
-                              </div>
+                                    : applying === jobId
+                                    ? "Applying…"
+                                    : "Apply now"}
+                                </Button>
+                              )}
                             </div>
-                          </div>
 
-                          {/* APPLY BUTTON */}
-                          <div className="mt-auto pt-4 border-t border-border">
-
-                            {isClosed ? (
-                              <Button
-                                size="sm"
-                                className="w-full"
-                                disabled
-                              >
-                                Closed
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                className="w-full"
-                                disabled={
-                                  applying === jobId ||
-                                  isApplied ||
-                                  !resumeId
-                                }
-                                onClick={() =>
-                                  handleApply(jobId)
-                                }
-                              >
-                                {isApplied
-                                  ? "Applied"
-                                  : applying === jobId
-                                  ? "Applying…"
-                                  : "Apply now"}
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      </AnimatedItem>
-                    );
-                  })}
+                          </Card>
+                        </AnimatedItem>
+                      );
+                    }
+                  )}
                 </AnimatedSection>
               )}
             </>
